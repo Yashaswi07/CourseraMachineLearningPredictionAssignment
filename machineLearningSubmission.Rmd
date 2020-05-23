@@ -1,0 +1,106 @@
+---
+title: "Predicting Exercises Quality From Accelerator Data"
+author: "Yashaswi Prakash"
+date: "May 5, 2020"
+output: html_document
+---
+```{r setup}
+knitr::opts_chunk$set(cache=TRUE, eval=TRUE)
+require("caret")
+require("rpart")
+require("dplyr")
+require("knitr")
+require("rattle")
+require("doParallel")
+set.seed(1024)
+### Performance Tuning of Machine Learning.
+library(parallel)
+library(doParallel)
+cluster <- makeCluster(detectCores() - 1) # convention to leave 1 core for OS
+registerDoParallel(cluster)
+```
+
+## Introduction
+Using devices such as Jawbone Up, Nike FuelBand, and Fitbit it is now possible to collect a large amount of data about personal activity relatively inexpensively. These type of devices are part of the quantified self movement - a group of enthusiasts who take measurements about themselves regularly to improve their health, to find patterns in their behavior, or because they are tech geeks. One thing that people regularly do is quantify how much of a particular activity they do, but they rarely quantify how well they do it. In this project, the goal will be to use data from accelerometers on the belt, forearm, arm, and dumbell of 6 participants. They were asked to perform barbell lifts correctly and incorrectly in 5 different ways. More information is available from the website here: http://web.archive.org/web/20161224072740/http:/groupware.les.inf.puc-rio.br/har (see the section on the Weight Lifting Exercise Dataset).
+
+### Objective
+The goal of this project was to predict the manner in which they did the exercise. This is the "classe" variable in the training set. All the other variables could be used to predict with. 
+
+##Data
+Data was read  from locations <https://d396qusza40orc.cloudfront.net/predmachlearn/pml-training.csv> (training set) and <https://d396qusza40orc.cloudfront.net/predmachlearn/pml-testing.csv> (test set).
+
+## Loading and Cleaning  Train  and TestData
+```{r}
+training <- read.csv(url("https://d396qusza40orc.cloudfront.net/predmachlearn/pml-training.csv"))
+testing <-  read.csv(url("https://d396qusza40orc.cloudfront.net/predmachlearn/pml-testing.csv"))
+head(testing)
+# Remove variables with (almost) all NAs
+training.old <- training
+training <- select(training, - which(is.na(training[1,])) )
+testing <- select(testing, - which(is.na(training[1,])) )
+testing.old <- testing
+testing <- select(testing, - which(is.na(testing[1,])) )
+# Remove variables with near zero variance
+nzv <- nearZeroVar(training,saveMetrics=TRUE)
+training <- training[,!nzv$nzv]
+# Remove unnecessary columns
+training <- select(training,-X,  - user_name,-raw_timestamp_part_1,-raw_timestamp_part_2,-cvtd_timestamp,-num_window )
+testing<- select(testing, -X, - user_name,-raw_timestamp_part_1,-raw_timestamp_part_2,-cvtd_timestamp,-num_window,-problem_id )
+# Partitioning
+inTrain <- createDataPartition(y = training$classe, p = .75, list = FALSE)
+training <- training[ inTrain,]
+##validation <- training[-inTrain,]
+dim(testing)
+dim(training)
+
+```
+
+### Models & cross validation
+Three methods were used to build three models, decision tree ('class'), stochastic gradient boosting ('gbm') and random forest ('rf'). The resulting models were cross validated with the validation set and compared on accuracy. The model with highest accuracy was chosen for the final model.
+
+```{r models1,cache=TRUE}
+fitControl <- trainControl(method = "cv",
+                           number = 5,
+                           allowParallel = TRUE)
+stopCluster(cluster)
+registerDoSEQ()
+# Decision Tree
+predictionDT <- train(classe ~ ., data = training, trControl = fitControl, method="rpart")
+confusionMatrix.train(predictionDT)
+pred <- predict(predictionDT,newdata=testing)
+#summary(pred)
+pred
+### Decision Tree
+###The decision tree looks as follows.
+fancyRpartPlot(predictionDT$finalModel, main="Decision Tree", sub="")
+#fancyRpartPlot(fitDT, main="Decision Tree", sub="")
+
+```
+#testing.csv$classe
+##table(pred$classe,testing.csv$classe)
+##table(pred$classe,testing$classe)
+```{r models2,cache=TRUE}
+# Stochastic Gradient Boosting
+predictionGBM <- train(classe ~ ., data = training, method = "gbm")
+confusionMatrix.train(predictionGBM)
+pred <- predict(predictionGBM,newdata=testing)
+#summary(pred)
+pred
+```
+## Random Forest
+```{r models3,cache=TRUE}
+
+predictionRF <- train(classe ~ ., data = training, trControl = fitControl, method="rf")
+confusionMatrix.train(predictionRF)
+pred <- predict(predictionRF,newdata=testing)
+#summary(pred)
+pred
+```
+
+### Results & Conclusion
+From the Results it is quite apparent that Random Forest prediction was the most accurate.
+
+
+
+
+
